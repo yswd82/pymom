@@ -2,7 +2,8 @@
 import os
 import zipfile
 import re
-import datetime
+from datetime import datetime, timezone
+
 import win32com.client
 
 INBOX = 6
@@ -16,41 +17,42 @@ class PyMom:
     def get_items(
         self,
         folder_path: str,
-        to: str = None,
-        cc: str = None,
-        bcc: str = None,
-        subject_contain: str = None,
-        has_attachment: bool = None,
-        categories: str = None,
-        sent_from: datetime.datetime = None,
-        sent_to: datetime.datetime = None,
-        *args,
-        **kwargs
+        to: str = "",
+        cc: str = "",
+        bcc: str = "",
+        subject_contain: str = "",
+        has_attachment: bool = False,
+        categories: str = "",
+        sent_from=None,
+        sent_to=None,
     ):
-        folders = self.account
-        for f in folder_path.split("\\"):
-            folders = folders.Folders[f]
+        folder = self.account
+        for path in folder_path.split("\\"):
+            folder = folder.Folders[path]
 
-        for item in list(folders.Items):
+        filtered = []
+        for item in list(folder.Items):
+            # 各種条件について、条件が有効かつ条件を満たさない場合はこのアイテムについての処理をスキップする
+            if to and to not in item.To:
+                continue
+            if cc and cc not in item.CC:
+                continue
+            if bcc and bcc not in item.BCC:
+                continue
+            if subject_contain and subject_contain not in item.Subject:
+                continue
+            if categories and categories not in item.Categories:
+                continue
+            if has_attachment and not item.Attachments:
+                continue
+            if sent_from and sent_from > item.SentOn:
+                continue
+            if sent_to and sent_to < item.SentOn:
+                continue
 
-            if to and to in item.To:
-                items = [item for item in items if to in item.To]
-            if cc:
-                items = [item for item in items if cc in item.CC]
-            if bcc:
-                items = [item for item in items if bcc in item.BCC]
-            if subject_contain:
-                items = [item for item in items if subject_contain in item.Subject]
-            if categories:
-                items = [item for item in items if categories in item.Categories]
-            if has_attachment:
-                items = [item for item in items if item.Attachments]
-            if sent_from:
-                items = [item for item in items if sent_from <= datetime.datetime.fromisoformat(item.SentOn)]
-            if sent_to:
-                items = [item for item in items if sent_to >= datetime.datetime.fromisoformat(item.SentOn)]
+            filtered.append(item)
 
-        # a = folders.Items[0]
+        # a = filtered[0]
         # keys = dir(a)
         # for k in keys:
         #     try:
@@ -58,7 +60,7 @@ class PyMom:
         #     except:
         #         pass
 
-        return items
+        return filtered
 
     def move(self, condition, folder_to: str):
         # 移動先フォルダ取得
@@ -92,7 +94,13 @@ class PyMom:
             except Exception as e:
                 print(e)
 
-    def save_attachment(self, condition, save_path: str, zip_extract: bool = False, zip_password: str = ""):
+    def save_attachment(
+        self,
+        condition,
+        save_path: str,
+        zip_extract: bool = False,
+        zip_password: str = "",
+    ):
         items = self.get_items(**condition)
 
         # 保存フォルダが無い場合は作成
@@ -156,16 +164,17 @@ if __name__ == "__main__":
     mail_addr = ""
     myol = PyMom(mail_addr)
 
-    path = "受信トレイ"
-    # mails = myol.get_items(path)
+    subject_contain = ""
+    sent_from = datetime(2022, 9, 14, tzinfo=timezone.utc)
+    sent_to = datetime(2022, 9, 17, tzinfo=timezone.utc)
 
-    # print(len(mails))
+    condition = {
+        "folder_path": "受信トレイ",
+    }
 
-    # for m in mails:
-    #     print(m.subject)
-
-    condition = {"folder_path": "受信トレイ\\TEST"}
+    condition.update({"sent_from": sent_from})
+    condition.update({"sent_to": sent_to})
 
     # myol.move(condition, "受信トレイ\\TEST")
-    # myol.save_message(condition, "S:\\")
-    myol.save_attachment(condition, "S:\\")
+    myol.save_message(condition, "P:\\")
+    # myol.save_attachment(condition, "P:\\")
